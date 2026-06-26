@@ -1,0 +1,18 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "IR Remote Manager",
+        "description": "Configure the IR blaster and Broadlink storage file.",
+        "data": {
+          "remote_entity": "IR blaster entity ID",
+          "broadlink_storage": "Broadlink storage file path"
+        }
+      }
+    },
+    "error": {},
+    "abort": {
+      "already_configured": "IR Remote Manager is already configured."
+    }
+  }
+}

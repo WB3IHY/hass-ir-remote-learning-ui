@@ -1,6 +1,11 @@
-config.ini
-*.db
 __pycache__/
 *.pyc
+*.pyo
 venv/
 .venv/
+# legacy Flask artifacts (no longer used)
+config.ini
+ir_codes.db
+static/
+templates/
+config.ini.example
