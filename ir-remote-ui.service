@@ -1,0 +1,14 @@
+[Unit]
+Description=HA IR Remote Learning UI
+After=network.target
+
+[Service]
+Type=simple
+User=jsb
+WorkingDirectory=/home/jsb/development/hass-ir-remote-learning-ui
+ExecStart=/home/jsb/development/hass-ir-remote-learning-ui/venv/bin/python3 app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+[homeassistant]
+url            = http://192.168.0.123:8123
+ws_url         = ws://192.168.0.123:8123/api/websocket
+token          = YOUR_LONG_LIVED_ACCESS_TOKEN
+remote_entity  = remote.ir_blaster
+
+[ssh]
+host         = 192.168.0.123
+port         = 22222
+user         = root
+key_file     =
+storage_path = /config/.storage/broadlink_remote_YOURMAC_codes
+
+[app]
+host    = 0.0.0.0
+port    = 5000
+db_file = ir_codes.db
