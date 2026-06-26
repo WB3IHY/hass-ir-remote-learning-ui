@@ -4,7 +4,7 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant import config_entries
 
-from . import DOMAIN, DEFAULT_REMOTE_ENTITY, DEFAULT_BROADLINK_STORAGE
+from . import DOMAIN, DEFAULT_REMOTE_ENTITY, _detect_broadlink_storage
 
 
 class IRRemoteManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -17,10 +17,18 @@ class IRRemoteManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="IR Remote Manager", data=user_input)
 
+        detected = await self.hass.async_add_executor_job(_detect_broadlink_storage)
+
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
                 vol.Required("remote_entity", default=DEFAULT_REMOTE_ENTITY): str,
-                vol.Required("broadlink_storage", default=DEFAULT_BROADLINK_STORAGE): str,
+                vol.Required("broadlink_storage", default=detected): str,
             }),
+            description_placeholders={
+                "storage_hint": (
+                    "Path to the Broadlink learned-codes file, e.g. "
+                    "/config/.storage/broadlink_remote_AABBCCDDEEFF_codes"
+                )
+            },
         )

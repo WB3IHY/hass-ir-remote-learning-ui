@@ -1,6 +1,7 @@
 """IR Remote Manager — custom HA integration."""
 from __future__ import annotations
 
+import glob
 import logging
 import pathlib
 
@@ -10,9 +11,12 @@ from homeassistant.core import HomeAssistant
 DOMAIN = "ir_remote_manager"
 
 DEFAULT_REMOTE_ENTITY = "remote.ir_blaster"
-DEFAULT_BROADLINK_STORAGE = (
-    "/config/.storage/broadlink_remote_e87072deb129_codes"
-)
+
+
+def _detect_broadlink_storage() -> str:
+    """Auto-detect the Broadlink learned-codes storage file."""
+    matches = sorted(glob.glob("/config/.storage/broadlink_remote_*_codes"))
+    return matches[0] if matches else ""
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -32,9 +36,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN] = {
         "store": store,
         "remote_entity": entry.data.get("remote_entity", DEFAULT_REMOTE_ENTITY),
-        "broadlink_storage": entry.data.get(
-            "broadlink_storage", DEFAULT_BROADLINK_STORAGE
-        ),
+        "broadlink_storage": entry.data.get("broadlink_storage", ""),
     }
 
     async_register_views(hass)
