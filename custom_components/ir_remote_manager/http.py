@@ -333,6 +333,13 @@ class PublishView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:
+        try:
+            return await self._do_publish(request)
+        except Exception as exc:
+            _LOGGER.exception("Publish failed: %s", exc)
+            return self.json({"message": f"{type(exc).__name__}: {exc}"}, status_code=500)
+
+    async def _do_publish(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app["hass"]
         store = _store(hass)
 
@@ -357,6 +364,8 @@ class PublishView(HomeAssistantView):
 
         if new_entities and add_fn:
             add_fn(new_entities)
+        elif new_entities and not add_fn:
+            _LOGGER.warning("async_add_entities not available; button platform may not be loaded")
 
         # ── Remove stale entities ─────────────────────────────────────────────
         ent_reg = er.async_get(hass)
