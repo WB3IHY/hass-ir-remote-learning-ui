@@ -47,7 +47,19 @@ main { flex: 1; overflow-y: auto; padding: 1.25rem; display: grid; grid-template
 .chip.sending .chip-name { animation: pulse .5s ease infinite alternate; }
 .chip.flash-ok { border-color: var(--success-color, #22c55e) !important; }
 .chip.flash-err { border-color: var(--error-color, #ef4444) !important; }
+.chip.published { border-color: var(--success-color, #22c55e); }
+.chip-pub { padding: .2rem .3rem; font-size: .6rem; font-weight: 700; color: var(--success-color, #22c55e); line-height: 1; cursor: default; border-left: 1px solid var(--divider-color, #2e3350); display: flex; align-items: center; }
 @keyframes pulse { from { opacity:.5 } to { opacity:1 } }
+
+/* publish preview */
+.pub-section { margin-bottom: 1rem; }
+.pub-section h3 { font-size: .8rem; font-weight: 600; color: var(--secondary-text-color, #94a3b8); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .45rem; }
+.pub-row { display: flex; align-items: center; gap: .5rem; padding: .33rem .55rem; border-radius: 5px; font-size: .84rem; margin-bottom: .22rem; }
+.pub-row.add  { background: rgba(34,197,94,.12); color: var(--success-color, #22c55e); }
+.pub-row.rem  { background: rgba(239,68,68,.12);  color: var(--error-color, #ef4444); }
+.pub-row.unch { background: var(--secondary-background-color, #22263a); color: var(--secondary-text-color, #94a3b8); }
+.pub-dev { font-size: .74rem; opacity: .65; margin-left: auto; }
+.pub-empty { text-align: center; padding: 1.75rem 1rem; color: var(--secondary-text-color, #94a3b8); font-size: .88rem; line-height: 1.6; }
 
 .empty { grid-column: 1/-1; text-align: center; padding: 4rem 1rem; color: var(--secondary-text-color, #94a3b8); }
 .empty h2 { font-size: 1.1rem; margin-bottom: .5rem; }
@@ -148,6 +160,7 @@ class IRRemoteManagerPanel extends HTMLElement {
         <header>
           <h1>📡 IR Remote Manager</h1>
           <button id="import-btn" class="btn btn-ghost btn-sm" title="Import codes from Broadlink .storage file (Broadlink users only)">Import Broadlink Codes</button>
+          <button id="sync-btn" class="btn btn-success btn-sm">Sync to HA</button>
           <button id="add-btn" class="btn btn-primary">+ Add Device</button>
         </header>
         <main id="main"></main>
@@ -165,6 +178,18 @@ class IRRemoteManagerPanel extends HTMLElement {
           </div>
         </div>
 
+        <!-- Publish Preview Modal -->
+        <div class="backdrop" id="pub-bd">
+          <div class="modal">
+            <div class="mhdr">
+              <h2>Sync to HA — Preview</h2>
+              <button class="mbtn-close" id="pub-x">✕</button>
+            </div>
+            <div class="mbody" id="pub-body"></div>
+            <div class="mfoot" id="pub-foot"></div>
+          </div>
+        </div>
+
         <!-- Learn Modal -->
         <div class="backdrop" id="learn-bd">
           <div class="modal sm">
@@ -179,8 +204,10 @@ class IRRemoteManagerPanel extends HTMLElement {
 
     const sr = this._sr;
     sr.getElementById('import-btn').onclick = () => this._doImport();
+    sr.getElementById('sync-btn').onclick   = () => this._openPublishModal();
     sr.getElementById('add-btn').onclick    = () => this._openWiz();
     sr.getElementById('wiz-x').onclick      = () => this._closeWiz();
+    sr.getElementById('pub-x').onclick      = () => this._closePub();
     sr.addEventListener('click', e => this._onClick(e));
     sr.addEventListener('keydown', e => this._onKeydown(e));
   }
@@ -294,9 +321,13 @@ class IRRemoteManagerPanel extends HTMLElement {
 
   _chipHtml(btn) {
     const cls = btn.learned ? 'learned' : 'unlearned';
-    return `<span class="chip ${cls}" id="chip-${btn.id}">
+    const pubCls = btn.published ? ' published' : '';
+    const pubBadge = btn.published
+      ? `<span class="chip-pub" title="Published as HA entity">HA</span>` : '';
+    return `<span class="chip ${cls}${pubCls}" id="chip-${btn.id}">
       <span class="chip-name" data-btn-id="${btn.id}" title="${btn.learned ? 'Send command' : 'Not learned yet'}">${esc(btn.name)}</span>
       <span class="chip-btns">
+        ${pubBadge}
         <button class="chip-btn learn" data-btn-id="${btn.id}" title="Learn this button">⟲</button>
         <button class="chip-btn del"   data-btn-id="${btn.id}" title="Remove button">✕</button>
       </span>
@@ -659,6 +690,89 @@ class IRRemoteManagerPanel extends HTMLElement {
   _wizSkip(idx) {
     this._wiz.buttons[idx].status = 'skip';
     this._renderWiz(3);
+  }
+
+  // ── Publish / Sync to HA ─────────────────────────────────────────────────
+  async _openPublishModal() {
+    const bd   = this._sr.getElementById('pub-bd');
+    const body = this._sr.getElementById('pub-body');
+    const foot = this._sr.getElementById('pub-foot');
+
+    body.innerHTML = `<p style="text-align:center;padding:1.5rem"><span class="spin"></span> Loading…</p>`;
+    foot.innerHTML = `<button class="btn btn-ghost" id="pub-cancel">Cancel</button>`;
+    bd.classList.add('open');
+    this._sr.getElementById('pub-cancel').onclick = () => this._closePub();
+
+    let preview;
+    try {
+      preview = await this._api('GET', 'publish_preview');
+    } catch (e) {
+      body.innerHTML = `<p style="color:var(--error-color,#ef4444);text-align:center;padding:1rem">Error: ${esc(e.message)}</p>`;
+      return;
+    }
+
+    const { to_create, to_remove, unchanged } = preview;
+    const hasChanges = to_create.length || to_remove.length;
+
+    let html = '';
+    if (!hasChanges && !unchanged.length) {
+      html = `<div class="pub-empty">No buttons to sync.<br>Add buttons to devices first.</div>`;
+    } else if (!hasChanges) {
+      html = `<div class="pub-empty">Everything is up to date.<br>${unchanged.length} button${unchanged.length !== 1 ? 's' : ''} already published as HA entities.</div>`;
+    } else {
+      if (to_create.length) {
+        html += `<div class="pub-section"><h3>+ Create (${to_create.length})</h3>
+          ${to_create.map(r => `<div class="pub-row add">+ ${esc(r.button_name)}<span class="pub-dev">${esc(r.device_name)}</span></div>`).join('')}
+        </div>`;
+      }
+      if (to_remove.length) {
+        html += `<div class="pub-section"><h3>&#x2212; Remove (${to_remove.length})</h3>
+          ${to_remove.map(r => `<div class="pub-row rem">&#x2212; ${esc(r.button_name)}<span class="pub-dev">${esc(r.device_name)}</span></div>`).join('')}
+        </div>`;
+      }
+      if (unchanged.length) {
+        html += `<div class="pub-section"><h3>Unchanged (${unchanged.length})</h3>
+          ${unchanged.map(r => `<div class="pub-row unch">= ${esc(r.button_name)}<span class="pub-dev">${esc(r.device_name)}</span></div>`).join('')}
+        </div>`;
+      }
+    }
+
+    body.innerHTML = html;
+    foot.innerHTML = `
+      <button class="btn btn-ghost" id="pub-cancel2">Cancel</button>
+      ${hasChanges ? `<button class="btn btn-success" id="pub-confirm">Apply Changes</button>` : ''}`;
+    this._sr.getElementById('pub-cancel2').onclick = () => this._closePub();
+    if (hasChanges) {
+      this._sr.getElementById('pub-confirm').onclick = () => this._doPublish();
+    }
+  }
+
+  _closePub() {
+    this._sr.getElementById('pub-bd').classList.remove('open');
+  }
+
+  async _doPublish() {
+    const body = this._sr.getElementById('pub-body');
+    const foot = this._sr.getElementById('pub-foot');
+    body.innerHTML = `<p style="text-align:center;padding:1.5rem"><span class="spin"></span> Applying…</p>`;
+    foot.innerHTML = '';
+    try {
+      const r = await this._api('POST', 'publish');
+      body.innerHTML = `
+        <div class="pub-empty">
+          <p style="font-size:2rem;margin-bottom:.6rem">✅</p>
+          <p>Created: <strong>${r.created}</strong> &nbsp; Removed: <strong>${r.removed}</strong> &nbsp; Unchanged: <strong>${r.unchanged}</strong></p>
+        </div>`;
+      foot.innerHTML = `<button class="btn btn-primary" id="pub-ok">Done</button>`;
+      this._sr.getElementById('pub-ok').onclick = () => {
+        this._closePub();
+        this._refresh();
+      };
+    } catch (e) {
+      body.innerHTML = `<p style="color:var(--error-color,#ef4444);text-align:center;padding:1rem">Error: ${esc(e.message)}</p>`;
+      foot.innerHTML = `<button class="btn btn-ghost" id="pub-err-close">Close</button>`;
+      this._sr.getElementById('pub-err-close').onclick = () => this._closePub();
+    }
   }
 
   // ── Toast ─────────────────────────────────────────────────────────────────

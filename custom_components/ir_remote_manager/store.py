@@ -23,7 +23,7 @@ def _now() -> str:
 class IRStore:
     def __init__(self, hass: HomeAssistant) -> None:
         self._store: Store = Store(hass, STORAGE_VERSION, STORAGE_KEY)
-        self._data: dict[str, Any] = {"devices": []}
+        self._data: dict[str, Any] = {"devices": [], "published_buttons": {}}
 
     async def async_load(self) -> None:
         stored = await self._store.async_load()
@@ -47,6 +47,20 @@ class IRStore:
                 if btn["id"] == button_id:
                     return dev, btn
         return None, None
+
+    # ── Published buttons ─────────────────────────────────────────────────────
+    # Stored as {button_id: {"device_name": ..., "button_name": ...}}
+    # so we can describe removed entities even after the button is deleted.
+
+    def get_published_buttons(self) -> dict[str, dict]:
+        return self._data.get("published_buttons", {})
+
+    def get_published_button_ids(self) -> set[str]:
+        return set(self.get_published_buttons().keys())
+
+    async def set_published_buttons(self, published: dict[str, dict]) -> None:
+        self._data["published_buttons"] = published
+        await self._save()
 
     # ── Write ─────────────────────────────────────────────────────────────────
 

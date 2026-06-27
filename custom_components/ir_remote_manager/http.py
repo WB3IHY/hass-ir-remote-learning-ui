@@ -27,6 +27,8 @@ def async_register_views(hass: HomeAssistant) -> None:
         ButtonLearnView,
         ButtonSendView,
         ImportView,
+        PublishPreviewView,
+        PublishView,
     ):
         hass.http.register_view(view)
 
@@ -42,12 +44,18 @@ def _cfg(hass: HomeAssistant) -> dict:
     return hass.data[DOMAIN]
 
 
-def _dev_dto(d: dict) -> dict:
+def _dev_dto(d: dict, published_ids: set | None = None) -> dict:
+    pub = published_ids or set()
     return {
         "id": d["id"],
         "name": d["name"],
         "buttons": [
-            {"id": b["id"], "name": b["name"], "learned": b["ir_code"] is not None}
+            {
+                "id": b["id"],
+                "name": b["name"],
+                "learned": b["ir_code"] is not None,
+                "published": b["id"] in pub,
+            }
             for b in d.get("buttons", [])
         ],
     }
@@ -63,7 +71,9 @@ class DevicesView(HomeAssistantView):
 
     async def get(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app["hass"]
-        return self.json([_dev_dto(d) for d in _store(hass).get_devices()])
+        store = _store(hass)
+        published_ids = store.get_published_button_ids()
+        return self.json([_dev_dto(d, published_ids) for d in store.get_devices()])
 
     async def post(self, request: web.Request) -> web.Response:
         hass: HomeAssistant = request.app["hass"]
@@ -256,4 +266,125 @@ class ImportView(HomeAssistantView):
             "success": True,
             "devices": devices_count,
             "buttons": buttons_count,
+        })
+
+
+# ── Helpers shared by the two publish views ───────────────────────────────────
+
+def _build_current_buttons(store) -> dict[str, dict]:
+    """Return {btn_id: {device_name, button_name, dev, btn}} for all stored buttons."""
+    result: dict[str, dict] = {}
+    for dev in store.get_devices():
+        for btn in dev.get("buttons", []):
+            result[btn["id"]] = {
+                "device_name": dev["name"],
+                "button_name": btn["name"],
+                "dev": dev,
+                "btn": btn,
+            }
+    return result
+
+
+class PublishPreviewView(HomeAssistantView):
+    """Return a diff of what a Publish would do without applying it."""
+
+    url = "/api/ir_remote_manager/publish_preview"
+    name = "api:ir_remote_manager:publish_preview"
+    requires_auth = True
+
+    async def get(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        store = _store(hass)
+
+        current = _build_current_buttons(store)  # {btn_id: ...}
+        already = store.get_published_buttons()   # {btn_id: {device_name, button_name}}
+
+        current_ids = set(current.keys())
+        already_ids = set(already.keys())
+
+        to_create = [
+            {"button_id": bid, "device_name": current[bid]["device_name"],
+             "button_name": current[bid]["button_name"]}
+            for bid in sorted(current_ids - already_ids)
+        ]
+        to_remove = [
+            {"button_id": bid, "device_name": already[bid]["device_name"],
+             "button_name": already[bid]["button_name"]}
+            for bid in sorted(already_ids - current_ids)
+        ]
+        unchanged = [
+            {"button_id": bid, "device_name": already[bid]["device_name"],
+             "button_name": already[bid]["button_name"]}
+            for bid in sorted(already_ids & current_ids)
+        ]
+
+        return self.json({
+            "to_create": to_create,
+            "to_remove": to_remove,
+            "unchanged": unchanged,
+        })
+
+
+class PublishView(HomeAssistantView):
+    """Apply the publish diff: create new entities, remove stale ones."""
+
+    url = "/api/ir_remote_manager/publish"
+    name = "api:ir_remote_manager:publish"
+    requires_auth = True
+
+    async def post(self, request: web.Request) -> web.Response:
+        hass: HomeAssistant = request.app["hass"]
+        store = _store(hass)
+
+        from .button import IRButtonEntity
+        from homeassistant.helpers import entity_registry as er
+
+        current = _build_current_buttons(store)
+        already = store.get_published_buttons()
+
+        current_ids = set(current.keys())
+        already_ids = set(already.keys())
+        to_create_ids = current_ids - already_ids
+        to_remove_ids = already_ids - current_ids
+
+        # ── Create new entities ───────────────────────────────────────────────
+        entry = hass.data[DOMAIN]["entry"]
+        add_fn = hass.data[DOMAIN].get("async_add_entities")
+        new_entities: list[IRButtonEntity] = []
+        for bid in to_create_ids:
+            info = current[bid]
+            new_entities.append(IRButtonEntity(hass, entry, info["dev"], info["btn"]))
+
+        if new_entities and add_fn:
+            add_fn(new_entities)
+
+        # ── Remove stale entities ─────────────────────────────────────────────
+        ent_reg = er.async_get(hass)
+        removed = 0
+        for bid in to_remove_ids:
+            unique_id = f"ir_remote_manager_{bid}"
+            entity_id = ent_reg.async_get_entity_id("button", DOMAIN, unique_id)
+            if entity_id:
+                ent_reg.async_remove(entity_id)
+                removed += 1
+
+        # ── Persist new published set ─────────────────────────────────────────
+        new_published = {
+            **{bid: {"device_name": already[bid]["device_name"],
+                     "button_name": already[bid]["button_name"]}
+               for bid in already_ids & current_ids},
+            **{bid: {"device_name": current[bid]["device_name"],
+                     "button_name": current[bid]["button_name"]}
+               for bid in to_create_ids},
+        }
+        await store.set_published_buttons(new_published)
+
+        _LOGGER.info(
+            "Publish: created %d, removed %d entities", len(new_entities), removed
+        )
+        return self.json({
+            "success": True,
+            "created": len(new_entities),
+            "removed": removed,
+            "unchanged": len(already_ids & current_ids),
         })

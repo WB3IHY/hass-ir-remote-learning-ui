@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 DOMAIN = "ir_remote_manager"
+PLATFORMS = ["button"]
 
 DEFAULT_REMOTE_ENTITY = "remote.ir_blaster"
 
@@ -35,12 +36,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN] = {
         "store": store,
+        "entry": entry,
         "remote_entity": entry.data.get("remote_entity", DEFAULT_REMOTE_ENTITY),
         "broadlink_storage": entry.data.get("broadlink_storage", ""),
     }
 
     async_register_views(hass)
     await _setup_panel(hass)
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 
@@ -73,5 +76,7 @@ async def _setup_panel(hass: HomeAssistant) -> None:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    hass.data.pop(DOMAIN, None)
-    return True
+    unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unload_ok:
+        hass.data.pop(DOMAIN, None)
+    return unload_ok
