@@ -70,7 +70,7 @@ async def _setup_panel(hass: HomeAssistant) -> None:
         sidebar_title="IR Remotes",
         sidebar_icon="mdi:remote-tv",
         js_url=f"{static_url}/panel.js",
-        require_admin=False,
+        require_admin=True,
     )
     _LOGGER.info("IR Remote Manager panel registered at /ir-remotes")
 

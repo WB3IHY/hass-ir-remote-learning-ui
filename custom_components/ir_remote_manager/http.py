@@ -44,6 +44,18 @@ def _cfg(hass: HomeAssistant) -> dict:
     return hass.data[DOMAIN]
 
 
+def _admin_check(request: web.Request) -> web.Response | None:
+    """Return a 403 JSON response if the requester is not an HA admin."""
+    user = request.get("hass_user")
+    if not user or not user.is_admin:
+        return web.Response(
+            status=403,
+            body='{"message":"Admin access required"}',
+            content_type="application/json",
+        )
+    return None
+
+
 def _dev_dto(d: dict, published_ids: set | None = None) -> dict:
     pub = published_ids or set()
     return {
@@ -70,12 +82,14 @@ class DevicesView(HomeAssistantView):
     requires_auth = True
 
     async def get(self, request: web.Request) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         store = _store(hass)
         published_ids = store.get_published_button_ids()
         return self.json([_dev_dto(d, published_ids) for d in store.get_devices()])
 
     async def post(self, request: web.Request) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         body: dict = await request.json()
         name = (body.get("name") or "").strip()
@@ -95,6 +109,7 @@ class DeviceView(HomeAssistantView):
     requires_auth = True
 
     async def delete(self, request: web.Request, device_id: str) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         await _store(hass).delete_device(device_id)
         return self.json({"ok": True})
@@ -106,6 +121,7 @@ class DeviceButtonsView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: web.Request, device_id: str) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         body: dict = await request.json()
         name = (body.get("name") or "").strip()
@@ -123,6 +139,7 @@ class ButtonView(HomeAssistantView):
     requires_auth = True
 
     async def delete(self, request: web.Request, button_id: str) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         await _store(hass).delete_button(button_id)
         return self.json({"ok": True})
@@ -134,6 +151,7 @@ class ButtonLearnView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: web.Request, button_id: str) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         store = _store(hass)
         cfg = _cfg(hass)
@@ -194,6 +212,7 @@ class ButtonSendView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: web.Request, button_id: str) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         store = _store(hass)
         cfg = _cfg(hass)
@@ -225,6 +244,7 @@ class ImportView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         store = _store(hass)
         cfg = _cfg(hass)
@@ -293,6 +313,7 @@ class PublishPreviewView(HomeAssistantView):
     requires_auth = True
 
     async def get(self, request: web.Request) -> web.Response:
+        if err := _admin_check(request): return err
         hass: HomeAssistant = request.app["hass"]
         store = _store(hass)
 
@@ -333,6 +354,7 @@ class PublishView(HomeAssistantView):
     requires_auth = True
 
     async def post(self, request: web.Request) -> web.Response:
+        if err := _admin_check(request): return err
         try:
             return await self._do_publish(request)
         except Exception as exc:
