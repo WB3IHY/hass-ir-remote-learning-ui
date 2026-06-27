@@ -157,19 +157,20 @@ class ButtonLearnView(HomeAssistantView):
         except Exception as exc:
             return self.json({"success": False, "message": str(exc)})
 
-        # Extract the code from Broadlink .storage (direct file read — we're on the Pi)
+        # If a Broadlink storage path is configured, extract the raw code after learning.
+        # Skipped silently for non-Broadlink setups — codes are still managed by HA.
         ir_code = None
-        try:
-            broadlink_path: str = cfg["broadlink_storage"]
+        broadlink_path: str = cfg.get("broadlink_storage", "")
+        if broadlink_path:
+            try:
+                def _read_code() -> Any:
+                    with open(broadlink_path) as fh:
+                        data = json.load(fh)
+                    return data.get("data", {}).get(device_name, {}).get(button_name)
 
-            def _read_code() -> Any:
-                with open(broadlink_path) as fh:
-                    data = json.load(fh)
-                return data.get("data", {}).get(device_name, {}).get(button_name)
-
-            ir_code = await hass.async_add_executor_job(_read_code)
-        except Exception as exc:
-            _LOGGER.warning("Could not read code from Broadlink storage: %s", exc)
+                ir_code = await hass.async_add_executor_job(_read_code)
+            except Exception as exc:
+                _LOGGER.warning("Could not read code from Broadlink storage: %s", exc)
 
         if ir_code:
             await store.save_button_code(button_id, ir_code)
@@ -218,8 +219,18 @@ class ImportView(HomeAssistantView):
         store = _store(hass)
         cfg = _cfg(hass)
 
+        broadlink_path: str = cfg.get("broadlink_storage", "")
+        if not broadlink_path:
+            return self.json({
+                "success": False,
+                "message": (
+                    "No Broadlink storage file configured. "
+                    "Set the path in the integration options to use this feature."
+                ),
+            }, status_code=400)
+
         def _read() -> dict:
-            with open(cfg["broadlink_storage"]) as fh:
+            with open(broadlink_path) as fh:
                 return json.load(fh)
 
         try:

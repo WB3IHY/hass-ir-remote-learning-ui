@@ -147,7 +147,7 @@ class IRRemoteManagerPanel extends HTMLElement {
       <div class="app">
         <header>
           <h1>📡 IR Remote Manager</h1>
-          <button id="import-btn" class="btn btn-ghost btn-sm">Import Broadlink Codes</button>
+          <button id="import-btn" class="btn btn-ghost btn-sm" title="Import codes from Broadlink .storage file (Broadlink users only)">Import Broadlink Codes</button>
           <button id="add-btn" class="btn btn-primary">+ Add Device</button>
         </header>
         <main id="main"></main>

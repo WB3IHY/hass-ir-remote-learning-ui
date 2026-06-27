@@ -17,18 +17,14 @@ class IRRemoteManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             return self.async_create_entry(title="IR Remote Manager", data=user_input)
 
-        detected = await self.hass.async_add_executor_job(_detect_broadlink_storage)
+        # Try to auto-detect a Broadlink storage file as a convenience default.
+        # Non-Broadlink users can leave this blank.
+        detected_storage = await self.hass.async_add_executor_job(_detect_broadlink_storage)
 
         return self.async_show_form(
             step_id="user",
             data_schema=vol.Schema({
                 vol.Required("remote_entity", default=DEFAULT_REMOTE_ENTITY): str,
-                vol.Required("broadlink_storage", default=detected): str,
+                vol.Optional("broadlink_storage", default=detected_storage): str,
             }),
-            description_placeholders={
-                "storage_hint": (
-                    "Path to the Broadlink learned-codes file, e.g. "
-                    "/config/.storage/broadlink_remote_AABBCCDDEEFF_codes"
-                )
-            },
         )

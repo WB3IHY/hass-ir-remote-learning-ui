@@ -3,10 +3,10 @@
     "step": {
       "user": {
         "title": "IR Remote Manager",
-        "description": "Configure the IR blaster and Broadlink storage file.",
+        "description": "Enter the entity ID of your IR blaster. It must support the `remote.learn_command` and `remote.send_command` services (Broadlink, ZHA, MQTT remote, etc.).\n\nThe Broadlink storage path is optional — only needed if you want to import codes already learned via the Broadlink integration.",
         "data": {
-          "remote_entity": "IR blaster entity ID",
-          "broadlink_storage": "Broadlink storage file path"
+          "remote_entity": "IR remote entity ID",
+          "broadlink_storage": "Broadlink storage file (optional — leave blank if not using Broadlink)"
         }
       }
     },
