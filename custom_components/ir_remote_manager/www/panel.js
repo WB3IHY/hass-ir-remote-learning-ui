@@ -27,8 +27,8 @@ header h1 { flex: 1; font-size: 1.1rem; font-weight: 600; color: var(--primary-c
 
 main { flex: 1; overflow-y: auto; padding: 1.25rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 1.1rem; align-items: start; }
 
-.card { background: var(--card-background-color, #1a1d27); border: 1px solid var(--divider-color, #2e3350); border-radius: 10px; overflow: hidden; }
-.card-header { display: flex; align-items: center; justify-content: space-between; padding: .7rem 1rem; background: var(--secondary-background-color, #22263a); border-bottom: 1px solid var(--divider-color, #2e3350); }
+.card { background: var(--card-background-color, #1a1d27); border: 1px solid var(--divider-color, #2e3350); border-radius: 10px; }
+.card-header { display: flex; align-items: center; justify-content: space-between; padding: .7rem 1rem; background: var(--secondary-background-color, #22263a); border-bottom: 1px solid var(--divider-color, #2e3350); border-radius: 9px 9px 0 0; }
 .card-title { font-weight: 600; font-size: .95rem; }
 .btn-grid { display: flex; flex-wrap: wrap; gap: .45rem; padding: .85rem 1rem; min-height: 2.5rem; }
 .add-row { display: flex; gap: .4rem; padding: .5rem .85rem .75rem; border-top: 1px solid var(--divider-color, #2e3350); }
